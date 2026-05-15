@@ -1,7 +1,7 @@
 # Vector Language Reference
 
 **Status:** Informative reference  
-**Version:** 1.1
+
 
 This document is a compact reference for the native Vector Language.
 
