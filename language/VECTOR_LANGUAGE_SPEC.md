@@ -1,7 +1,6 @@
 # Vector Language Specification
 
 **Status:** Canonical language layer specification  
-**Version:** 1.1  
 **Target:** The Vector Network kernel
 
 ## 1. Purpose
