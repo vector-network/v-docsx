@@ -62,7 +62,7 @@ Use this repository to:
 
 ## Recommended reading order
 
-1. [`docs/overview/QUICK_START.md`](https://github.com/vnetworkx/docs/blob/main/overview/QUICK_START.md)
+1. [`docs/overview/INTRODUCTION.md`](https://github.com/vnetworkx/docs/blob/main/overview/INTRODUCTION.md)
 2. [`docs/overview/CONCEPT_MAP.md`](https://github.com/vnetworkx/docs/blob/main/overview/CONCEPT_MAP.md)
 3. [`docs/core/SPEC.md`](https://github.com/vnetworkx/docs/blob/main/core/SPEC.md)
 4. [`docs/reference/GLOSSARY.md`](https://github.com/vnetworkx/docs/blob/main/reference/GLOSSARY.md)

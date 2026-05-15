@@ -1,7 +1,6 @@
 # Operations Finite Transition Model
 
-**Status:** Canonical allowed-transition reference  
-**Version:** 1.1
+**Status:** Canonical allowed-transition reference 
 
 ## 1. Purpose
 

@@ -1,7 +1,6 @@
 # Visualization Framework
 
-**Status:** Architecture and protocol visualization layer  
-**Version:** 1.1
+**Status:** Architecture and protocol visualization layer 
 
 ## 1. Purpose
 
