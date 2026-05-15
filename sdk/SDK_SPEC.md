@@ -1,7 +1,6 @@
 # SDK Specification
 
 **Status:** Canonical interface contract  
-**Version:** 1.1
 
 ## 1. Purpose
 
