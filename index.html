@@ -159,23 +159,12 @@
 
   <script>
     const OWNER = "vnetworkx";
-    const REPO  = "docs";
+    const REPO = "docs";
     const DEFAULT_FILE = "README.md";
 
     function getCurrentFile() {
       const params = new URLSearchParams(window.location.search);
       return params.get("file") || DEFAULT_FILE;
-    }
-
-    function setCurrentFile(file) {
-      const url = new URL(window.location.href);
-      if (file && file !== DEFAULT_FILE) {
-        url.searchParams.set("file", file);
-      } else {
-        url.searchParams.delete("file");
-      }
-      window.history.pushState({}, "", url);
-      loadPage();
     }
 
     function pathDir(path) {
@@ -216,60 +205,55 @@
     }
 
     function rewriteHref(href, baseFile) {
-      if (!href) return href;
+      const trimmed = String(href ?? "").trim();
+      if (!trimmed) return trimmed;
 
-      const trimmed = href.trim();
+      if (trimmed.startsWith("#")) return trimmed;
 
-      if (trimmed.startsWith("#")) {
-        return trimmed;
-      }
+      const githubBlobPrefixes = [
+        `https://github.com/${OWNER}/${REPO}/blob/main/`,
+        `https://github.com/${OWNER}/${REPO}/blob/master/`,
+        `https://raw.githubusercontent.com/${OWNER}/${REPO}/main/`,
+        `https://raw.githubusercontent.com/${OWNER}/${REPO}/master/`
+      ];
 
-      try {
-        const githubBlobPrefixes = [
-          `https://github.com/${OWNER}/${REPO}/blob/main/`,
-          `https://github.com/${OWNER}/${REPO}/blob/master/`,
-          `https://raw.githubusercontent.com/${OWNER}/${REPO}/main/`,
-          `https://raw.githubusercontent.com/${OWNER}/${REPO}/master/`
-        ];
+      for (const prefix of githubBlobPrefixes) {
+        if (trimmed.startsWith(prefix)) {
+          const rest = trimmed.slice(prefix.length);
+          const [pathPart, hashPart] = rest.split("#");
+          const [cleanPath, queryPart] = pathPart.split("?");
 
-        for (const prefix of githubBlobPrefixes) {
-          if (trimmed.startsWith(prefix)) {
-            const rest = trimmed.slice(prefix.length);
-            const [pathPart, hashPart] = rest.split("#");
-            const [cleanPath, queryPart] = pathPart.split("?");
-            const route = cleanPath.endsWith(".md")
-              ? toSiteRoute(cleanPath, hashPart ? "#" + hashPart : "")
-              : cleanPath;
-            return queryPart ? route + "?" + queryPart : route;
-          }
-        }
+          const route = cleanPath.endsWith(".md")
+            ? toSiteRoute(cleanPath, hashPart ? "#" + hashPart : "")
+            : cleanPath;
 
-        if (
-          trimmed.startsWith("http://") ||
-          trimmed.startsWith("https://") ||
-          trimmed.startsWith("mailto:") ||
-          trimmed.startsWith("tel:")
-        ) {
-          return trimmed;
-        }
-
-        const [hrefPath, hrefHash] = trimmed.split("#");
-        const [cleanHrefPath, queryPart] = hrefPath.split("?");
-
-        const resolved = resolveRelativePath(baseFile, cleanHrefPath || "");
-
-        if (resolved.endsWith(".md")) {
-          const route = toSiteRoute(resolved, hrefHash ? "#" + hrefHash : "");
           return queryPart ? route + "?" + queryPart : route;
         }
+      }
 
-        if (!cleanHrefPath) return trimmed;
-
-        const route = toSiteRoute(resolved, hrefHash ? "#" + hrefHash : "");
-        return queryPart ? route + "?" + queryPart : route;
-      } catch {
+      if (
+        trimmed.startsWith("http://") ||
+        trimmed.startsWith("https://") ||
+        trimmed.startsWith("mailto:") ||
+        trimmed.startsWith("tel:")
+      ) {
         return trimmed;
       }
+
+      const [hrefPath, hrefHash] = trimmed.split("#");
+      const [cleanHrefPath, queryPart] = hrefPath.split("?");
+
+      const resolved = resolveRelativePath(baseFile, cleanHrefPath || "");
+
+      if (resolved.endsWith(".md")) {
+        const route = toSiteRoute(resolved, hrefHash ? "#" + hrefHash : "");
+        return queryPart ? route + "?" + queryPart : route;
+      }
+
+      if (!cleanHrefPath) return trimmed;
+
+      const route = toSiteRoute(resolved, hrefHash ? "#" + hrefHash : "");
+      return queryPart ? route + "?" + queryPart : route;
     }
 
     async function loadMarkdown(file) {
@@ -320,7 +304,7 @@
         title.textContent = REPO;
         badge.innerHTML = `Latest release: <strong>${tag}</strong>`;
         document.title = `${REPO} · ${tag}`;
-      } catch (e) {
+      } catch {
         title.textContent = REPO;
         badge.innerHTML = `Latest release: <strong>unavailable</strong>`;
         document.title = REPO;
