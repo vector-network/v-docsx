@@ -6,7 +6,6 @@
   <meta name="color-scheme" content="dark" />
   <title>Docs</title>
 
-  <!-- Use GitHub markdown styling, but we override it for dark text -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.5.1/github-markdown-dark.min.css">
 
   <style>
@@ -15,9 +14,10 @@
       --border: rgba(255,255,255,0.18);
       --bg: #0b0f14;
       --text: #ffffff;
-      --muted: #f2f2f2;
       --header-bg: #11161d;
-      --link: #8ab4ff;
+      --link: #7db7ff;
+      --link-hover: #a8d0ff;
+      --code-bg: rgba(255,255,255,0.06);
     }
 
     body {
@@ -105,14 +105,19 @@
     .markdown-body td,
     .markdown-body th,
     .markdown-body code,
-    .markdown-body pre,
-    .markdown-body a {
+    .markdown-body pre {
       color: #ffffff !important;
     }
 
-    .markdown-body a {
+    .markdown-body a,
+    .markdown-body a:visited {
+      color: var(--link) !important;
       text-decoration: underline;
       text-underline-offset: 2px;
+    }
+
+    .markdown-body a:hover {
+      color: var(--link-hover) !important;
     }
 
     .markdown-body hr,
@@ -128,7 +133,12 @@
     .markdown-body pre,
     .markdown-body code,
     .markdown-body blockquote {
-      background: rgba(255,255,255,0.06) !important;
+      background: var(--code-bg) !important;
+    }
+
+    .markdown-body img {
+      max-width: 100%;
+      height: auto;
     }
   </style>
 </head>
@@ -150,17 +160,148 @@
   <script>
     const OWNER = "vnetworkx";
     const REPO  = "docs";
-    const README_PATH = "./README.md";
+    const DEFAULT_FILE = "README.md";
 
-    async function loadMarkdown() {
-      const res = await fetch(README_PATH, { cache: "no-store" });
-      if (!res.ok) throw new Error(`README fetch failed: ${res.status}`);
-      const md = await res.text();
-      const html = marked.parse(md, {
+    function getCurrentFile() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("file") || DEFAULT_FILE;
+    }
+
+    function setCurrentFile(file) {
+      const url = new URL(window.location.href);
+      if (file && file !== DEFAULT_FILE) {
+        url.searchParams.set("file", file);
+      } else {
+        url.searchParams.delete("file");
+      }
+      window.history.pushState({}, "", url);
+      loadPage();
+    }
+
+    function pathDir(path) {
+      const idx = path.lastIndexOf("/");
+      return idx >= 0 ? path.slice(0, idx + 1) : "";
+    }
+
+    function normalizePath(path) {
+      const parts = [];
+      for (const part of path.split("/")) {
+        if (!part || part === ".") continue;
+        if (part === "..") {
+          if (parts.length) parts.pop();
+          continue;
+        }
+        parts.push(part);
+      }
+      return parts.join("/");
+    }
+
+    function resolveRelativePath(baseFile, relativeHref) {
+      if (!relativeHref) return relativeHref;
+      if (relativeHref.startsWith("#")) return relativeHref;
+
+      const baseDir = pathDir(baseFile);
+      return normalizePath(baseDir + relativeHref);
+    }
+
+    function toSiteRoute(filePath, hash = "") {
+      const url = new URL(window.location.href);
+      if (filePath && filePath !== DEFAULT_FILE) {
+        url.searchParams.set("file", filePath);
+      } else {
+        url.searchParams.delete("file");
+      }
+      url.hash = hash || "";
+      return url.pathname + url.search + url.hash;
+    }
+
+    function rewriteHref(href, baseFile) {
+      if (!href) return href;
+
+      const trimmed = href.trim();
+
+      if (trimmed.startsWith("#")) {
+        return trimmed;
+      }
+
+      try {
+        const githubBlobPrefixes = [
+          `https://github.com/${OWNER}/${REPO}/blob/main/`,
+          `https://github.com/${OWNER}/${REPO}/blob/master/`,
+          `https://raw.githubusercontent.com/${OWNER}/${REPO}/main/`,
+          `https://raw.githubusercontent.com/${OWNER}/${REPO}/master/`
+        ];
+
+        for (const prefix of githubBlobPrefixes) {
+          if (trimmed.startsWith(prefix)) {
+            const rest = trimmed.slice(prefix.length);
+            const [pathPart, hashPart] = rest.split("#");
+            const [cleanPath, queryPart] = pathPart.split("?");
+            const route = cleanPath.endsWith(".md")
+              ? toSiteRoute(cleanPath, hashPart ? "#" + hashPart : "")
+              : cleanPath;
+            return queryPart ? route + "?" + queryPart : route;
+          }
+        }
+
+        if (
+          trimmed.startsWith("http://") ||
+          trimmed.startsWith("https://") ||
+          trimmed.startsWith("mailto:") ||
+          trimmed.startsWith("tel:")
+        ) {
+          return trimmed;
+        }
+
+        const [hrefPath, hrefHash] = trimmed.split("#");
+        const [cleanHrefPath, queryPart] = hrefPath.split("?");
+
+        const resolved = resolveRelativePath(baseFile, cleanHrefPath || "");
+
+        if (resolved.endsWith(".md")) {
+          const route = toSiteRoute(resolved, hrefHash ? "#" + hrefHash : "");
+          return queryPart ? route + "?" + queryPart : route;
+        }
+
+        if (!cleanHrefPath) return trimmed;
+
+        const route = toSiteRoute(resolved, hrefHash ? "#" + hrefHash : "");
+        return queryPart ? route + "?" + queryPart : route;
+      } catch {
+        return trimmed;
+      }
+    }
+
+    async function loadMarkdown(file) {
+      const res = await fetch(file, { cache: "no-store" });
+      if (!res.ok) throw new Error(`Markdown fetch failed: ${res.status}`);
+      return await res.text();
+    }
+
+    function renderMarkdown(md, baseFile) {
+      const renderer = new marked.Renderer();
+
+      renderer.link = function(href, title, text) {
+        const safeHref = rewriteHref(href, baseFile);
+        const safeTitle = title ? ` title="${String(title).replaceAll('"', "&quot;")}"` : "";
+        return `<a href="${safeHref}"${safeTitle}>${text}</a>`;
+      };
+
+      renderer.image = function(href, title, text) {
+        const safeHref = rewriteHref(href, baseFile);
+        const safeTitle = title ? ` title="${String(title).replaceAll('"', "&quot;")}"` : "";
+        const safeAlt = text ? ` alt="${String(text).replaceAll('"', "&quot;")}"` : ' alt=""';
+        return `<img src="${safeHref}"${safeAlt}${safeTitle}>`;
+      };
+
+      marked.setOptions({
         gfm: true,
         breaks: false,
+        renderer
       });
-      document.getElementById("content").innerHTML = DOMPurify.sanitize(html);
+
+      const html = marked.parse(md);
+      return DOMPurify.sanitize(html);
     }
 
     async function loadLatestRelease() {
@@ -174,23 +315,33 @@
 
         if (!res.ok) throw new Error(`Release fetch failed: ${res.status}`);
         const data = await res.json();
-
         const tag = data.tag_name || "unknown";
 
-        title.textContent = `${REPO}`;
+        title.textContent = REPO;
         badge.innerHTML = `Latest release: <strong>${tag}</strong>`;
         document.title = `${REPO} · ${tag}`;
       } catch (e) {
-        title.textContent = `${REPO}`;
+        title.textContent = REPO;
         badge.innerHTML = `Latest release: <strong>unavailable</strong>`;
         document.title = REPO;
       }
     }
 
-    Promise.all([loadLatestRelease(), loadMarkdown()]).catch(err => {
-      document.getElementById("content").innerHTML =
-        `<pre>Failed to load page: ${String(err.message || err)}</pre>`;
-    });
+    async function loadPage() {
+      const file = getCurrentFile();
+      try {
+        const md = await loadMarkdown(file);
+        document.getElementById("content").innerHTML = renderMarkdown(md, file);
+        document.title = `${REPO} · ${file}`;
+      } catch (err) {
+        document.getElementById("content").innerHTML =
+          `<pre>Failed to load page: ${String(err.message || err)}</pre>`;
+      }
+    }
+
+    window.addEventListener("popstate", loadPage);
+
+    Promise.all([loadLatestRelease(), loadPage()]);
   </script>
 </body>
 </html>
