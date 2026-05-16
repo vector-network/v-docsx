@@ -4,7 +4,23 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="color-scheme" content="dark" />
+
   <title>Docs</title>
+  <meta id="metaDescription" name="description" content="Documentation site." />
+  <meta id="metaRobots" name="robots" content="index,follow,m [oai_citation:0‡Google for Developers](https://developers.google.com/search/docs/crawling-indexing/sitemaps/overview?utm_source=chatgpt.com)>
+  <meta id="metaGooglebot" name="googlebot" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+
+  <meta id="ogTitle" property="og:title" content="Docs" />
+  <meta id="ogDescription" property="og:description" content="Documentation site." />
+  <meta id="ogUrl" property="og:url" content="" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Docs" />
+  <meta name="twitter:card" content="summary" />
+  <meta id="twitterTitle" name="twitter:title" content="Docs" />
+  <meta id="twitterDescription" name="twitter:description" content="Documentation site." />
+
+  <link id="canonicalLink" rel="canonical" href="" />
+  <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.5.1/github-markdown-dark.min.css">
 
@@ -202,6 +218,11 @@
     const OWNER = "vnetworkx";
     const REPO = "docs";
     const DEFAULT_FILE = "README.md";
+
+    let currentReleaseTitle = "";
+    let currentReleaseTag = "";
+    let currentPageTitle = "";
+    let currentDescription = "";
 
     function getCurrentFile() {
       const params = new URLSearchParams(window.location.search);
@@ -405,6 +426,73 @@
       return DOMPurify.sanitize(html);
     }
 
+    function textFromMarkdown(md) {
+      const html = marked.parse(md);
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      return (doc.body.textContent || "")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function titleFromMarkdown(md, fallback) {
+      const tokens = marked.lexer(md);
+      const heading = tokens.find(t => t.type === "heading" && t.depth <= 2);
+      if (heading && heading.text) return String(heading.text).trim();
+      return fallback;
+    }
+
+    function setMeta(id, content) {
+      const el = document.getElementById(id);
+      if (el) el.setAttribute("content", content || "");
+    }
+
+    function updateSeo() {
+      const header = document.getElementById("releaseHeader");
+      const canonicalLink = document.getElementById("canonicalLink");
+      const currentUrl = new URL(window.location.href);
+      currentUrl.hash = "";
+
+      const releaseLabel = currentReleaseTitle && currentReleaseTag
+        ? `${currentReleaseTitle} ${currentReleaseTag}`
+        : currentReleaseTitle || currentReleaseTag || REPO;
+
+      const pageTitle = currentPageTitle || DEFAULT_FILE;
+      const fullTitle = `${pageTitle} · ${releaseLabel}`;
+
+      document.title = fullTitle;
+      header.textContent = releaseLabel;
+
+      const description = currentDescription || `Documentation page for ${pageTitle} in ${releaseLabel}.`;
+
+      setMeta("metaDescription", description);
+      setMeta("metaRobots", "index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1");
+      setMeta("metaGooglebot", "index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1");
+
+      setMeta("ogTitle", fullTitle);
+      setMeta("ogDescription", description);
+      setMeta("ogUrl", currentUrl.href);
+      setMeta("twitterTitle", fullTitle);
+      setMeta("twitterDescription", description);
+
+      if (canonicalLink) canonicalLink.href = currentUrl.href;
+
+      const jsonLd = {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        name: fullTitle,
+        description,
+        url: currentUrl.href,
+        isPartOf: {
+          "@type": "WebSite",
+          name: REPO,
+          url: currentUrl.origin + currentUrl.pathname
+        }
+      };
+
+      const jsonLdEl = document.getElementById("jsonLd");
+      if (jsonLdEl) jsonLdEl.textContent = JSON.stringify(jsonLd);
+    }
+
     function scrollToHash(hash) {
       if (!hash || hash === "#") return;
       const id = decodeURIComponent(hash.slice(1));
@@ -415,8 +503,6 @@
     }
 
     async function loadLatestRelease() {
-      const header = document.getElementById("releaseHeader");
-
       try {
         const res = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/releases/latest`, {
           headers: { "Accept": "application/vnd.github+json" }
@@ -425,15 +511,14 @@
         if (!res.ok) throw new Error(`Release fetch failed: ${res.status}`);
         const data = await res.json();
 
-        const releaseTitle = (data.name && String(data.name).trim()) ? data.name.trim() : "Untitled release";
-        const tag = (data.tag_name && String(data.tag_name).trim()) ? data.tag_name.trim() : "unknown";
-
-        header.textContent = `${releaseTitle} ${tag}`;
-        document.title = `${releaseTitle} ${tag}`;
+        currentReleaseTitle = (data.name && String(data.name).trim()) ? data.name.trim() : "Untitled release";
+        currentReleaseTag = (data.tag_name && String(data.tag_name).trim()) ? data.tag_name.trim() : "unknown";
       } catch {
-        header.textContent = "Latest release unavailable";
-        document.title = REPO;
+        currentReleaseTitle = "Release unavailable";
+        currentReleaseTag = "";
       }
+
+      updateSeo();
     }
 
     async function loadPage() {
@@ -442,14 +527,19 @@
 
       try {
         const md = await loadMarkdown(file);
-        document.getElementById("content").innerHTML = renderMarkdown(md, file);
-        document.title = `${REPO} · ${file}`;
+        currentPageTitle = titleFromMarkdown(md, file);
+        currentDescription = textFromMarkdown(md).slice(0, 160);
 
+        document.getElementById("content").innerHTML = renderMarkdown(md, file);
         requestAnimationFrame(() => scrollToHash(hash));
       } catch (err) {
+        currentPageTitle = "Error";
+        currentDescription = String(err.message || err).slice(0, 160);
         document.getElementById("content").innerHTML =
           `<pre>Failed to load page: ${escapeHtml(String(err.message || err))}</pre>`;
       }
+
+      updateSeo();
     }
 
     function navigateTo(url) {
@@ -532,5 +622,7 @@
 
     Promise.all([loadLatestRelease(), loadPage()]);
   </script>
+
+  <script id="jsonLd" type="application/ld+json"></script>
 </body>
 </html>
